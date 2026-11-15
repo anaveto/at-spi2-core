@@ -1,0 +1,53 @@
+name: MR test (device-x11 finalize)
+
+# main (10fbc4b) and the MR branch: the finalize crash test, upstream's test suite and clang-format-diff.
+on:
+  push:
+    branches: [mr-test]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: registry.fedoraproject.org/fedora:45
+    steps:
+    - name: Dependencies
+      run: |
+        dnf -y install dnf-plugins-core git xorg-x11-server-Xvfb xvfb-run dbus-daemon dbus-broker python3-gobject python3-dbusmock python3-pytest procps-ng clang-tools-extra
+        dnf -y builddep at-spi2-core
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Crash test, main and the MR branch
+      run: |
+        git config --global --add safe.directory "$PWD"
+        cat > /tmp/finalize.py <<'PY'
+        import gi
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+        d = Atspi.DeviceX11.new()
+        del d
+        import gc; gc.collect()
+        print("finalized, no crash")
+        PY
+        for ref in 10fbc4b HEAD~1; do
+          git worktree add -f /tmp/src-$ref $ref >/dev/null
+          (cd /tmp/src-$ref && meson setup -Ddocs=false _build >/dev/null && meson compile -C _build >/dev/null)
+          echo "== $(git log -1 --format='%h %s' $ref), DISPLAY=:99 (no X server)"
+          (cd /tmp/src-$ref && DISPLAY=:99 meson devenv -C _build python3 /tmp/finalize.py; echo "exit $?") || true
+          echo "== same, DISPLAY from xvfb-run"
+          (cd /tmp/src-$ref && xvfb-run -a meson devenv -C _build python3 /tmp/finalize.py; echo "exit $?") || true
+        done
+    - name: Test suite on the MR branch (as upstream's CI)
+      run: |
+        git checkout -q HEAD~1
+        meson setup --buildtype=debug -Ddefault_bus=dbus-broker -Ddbus_broker=/usr/bin/dbus-broker-launch --prefix /usr _build .
+        meson compile -C _build
+        meson install -C _build
+        mkdir -p /tmp/test+dir+with+funny+chars
+        export XDG_RUNTIME_DIR=/tmp/test+dir+with+funny+chars
+        xvfb-run --auto-servernum dbus-run-session -- ci/run-tests.sh
+    - name: clang-format-diff
+      run: |
+        git diff -U0 10fbc4b HEAD~1 | clang-format-diff -p1 | tee /tmp/cf.diff
+        test ! -s /tmp/cf.diff && echo "clang-format-diff: no changes"
