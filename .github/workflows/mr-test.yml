@@ -13,7 +13,7 @@ jobs:
     steps:
     - name: Dependencies
       run: |
-        dnf -y install dnf-plugins-core git xorg-x11-server-Xvfb xvfb-run dbus-daemon dbus-broker python3-gobject python3-dbusmock python3-pytest procps-ng clang-tools-extra
+        dnf -y install dnf-plugins-core git xorg-x11-server-Xvfb xvfb-run dbus-daemon dbus-broker python3-gobject python3-dbusmock python3-pytest procps-ng clang-tools-extra at-spi2-core gsettings-desktop-schemas
         dnf -y builddep at-spi2-core
     - uses: actions/checkout@v4
       with:
@@ -36,7 +36,7 @@ jobs:
           echo "== $(git log -1 --format='%h %s' $ref), DISPLAY=:99 (no X server)"
           (cd /tmp/src-$ref && DISPLAY=:99 meson devenv -C _build python3 /tmp/finalize.py; echo "exit $?") || true
           echo "== same, DISPLAY from xvfb-run"
-          (cd /tmp/src-$ref && xvfb-run -a meson devenv -C _build python3 /tmp/finalize.py; echo "exit $?") || true
+          (cd /tmp/src-$ref && xvfb-run -a dbus-run-session -- meson devenv -C _build python3 /tmp/finalize.py; echo "exit $?") || true
         done
     - name: Test suite on the MR branch (as upstream's CI)
       run: |
