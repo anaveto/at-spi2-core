@@ -1,0 +1,28 @@
+name: libatspi for Bazzite
+
+# 2.62.1 (Fedora 45 / Bazzite) with the device-x11 finalize fix, to test on an MSI Claw without installing it.
+on:
+  push:
+    branches: [claw-test]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: registry.fedoraproject.org/fedora:45
+    steps:
+    - name: Dependencies (Fedora's own build dependencies)
+      run: |
+        dnf -y install dnf-plugins-core git
+        dnf -y builddep at-spi2-core
+    - uses: actions/checkout@v4
+    - name: Build
+      run: |
+        meson setup build -Dprefix=/usr -Dlibdir=lib64 -Dbuildtype=release -Ddocs=false -Dintrospection=disabled
+        meson compile -C build
+        mkdir -p out && cp -a build/atspi/libatspi.so* out/ && git log -2 --format='%H %s' > out/rev.txt
+        sha256sum out/* | tee out/SHA256SUMS
+    - uses: actions/upload-artifact@v4
+      with:
+        name: libatspi-claw-test
+        path: out/
