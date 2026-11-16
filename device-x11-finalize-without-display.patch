@@ -1,0 +1,44 @@
+From d48d68a0474bec2c13b9612d3b5c2f41482b3bc2 Mon Sep 17 00:00:00 2001
+From: Ana Veto <green.koala2979@fastmail.com>
+Date: Sun, 15 Nov 2026 00:15:04 +0000
+Subject: [PATCH] device-x11: Don't crash in finalize when the display couldn't
+ be opened
+
+atspi_device_x11_init() returns early when XOpenDisplay() fails, before
+the event listener is created. atspi_device_x11_finalize() then passes
+the NULL listener to atspi_event_listener_deregister(), which
+dereferences it.
+
+Orca crashed this way at session starts in a gamescope session (Steam's
+Game Mode on Bazzite, orca 51.1, at-spi2-core 2.62.1): SIGSEGV in
+atspi_event_listener_deregister from atspi_device_x11_finalize.
+
+Only deregister and unref the listener if it was created.
+---
+ atspi/atspi-device-x11.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/atspi/atspi-device-x11.c b/atspi/atspi-device-x11.c
+index 77254ca..e807645 100644
+--- a/atspi/atspi-device-x11.c
++++ b/atspi/atspi-device-x11.c
+@@ -759,9 +759,13 @@ atspi_device_x11_finalize (GObject *object)
+     }
+ 
+   /* TODO: deregister event listeners automatically when the listener is finalized */
+-  atspi_event_listener_deregister (priv->event_listener, "window:deactivate", NULL);
+-  atspi_event_listener_deregister (priv->event_listener, "window:activate", NULL);
+-  g_object_unref (priv->event_listener);
++  /* NULL if init returned early because the display could not be opened */
++  if (priv->event_listener)
++    {
++      atspi_event_listener_deregister (priv->event_listener, "window:deactivate", NULL);
++      atspi_event_listener_deregister (priv->event_listener, "window:activate", NULL);
++      g_object_unref (priv->event_listener);
++    }
+ 
+   device_x11_parent_class->finalize (object);
+ }
+-- 
+2.56.1
+

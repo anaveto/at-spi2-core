@@ -1,0 +1,39 @@
+name: at-spi2-core RPM for Bazzite
+
+# Fedora 45's own at-spi2-core 2.62.1-1.fc45 (the version on the MSI Claw), rebuilt by its spec with the device-x11
+# finalize fix (GNOME/at-spi2-core!243), so the library has Fedora's build flags. Release 1.1 marks the rebuild.
+on:
+  push:
+    branches: [claw-rpm]
+
+jobs:
+  rpm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: registry.fedoraproject.org/fedora:45
+    steps:
+    - uses: actions/checkout@v4
+    - name: Source RPM 2.62.1-1.fc45 from Koji
+      run: |
+        dnf -y install koji rpm-build dnf-plugins-core
+        koji download-build --arch=src at-spi2-core-2.62.1-1.fc45
+        rpm -i at-spi2-core-2.62.1-1.fc45.src.rpm
+    - name: Rebuild with the fix
+      run: |
+        S=~/rpmbuild/SPECS/at-spi2-core.spec
+        cp device-x11-finalize-without-display.patch ~/rpmbuild/SOURCES/
+        sed -i 's/^Release:\( *\)1%{?dist}/Release:\11.1%{?dist}/' $S
+        grep -q '^Release: *1.1%{?dist}' $S
+        sed -i '0,/^Source0:.*/s//&\nPatch: device-x11-finalize-without-display.patch/' $S
+        grep -n -E '^(Release|Source0|Patch)|%autosetup|%setup' $S
+        grep -q -E '%autosetup' $S
+        dnf -y builddep $S
+        rpmbuild -bb --target x86_64 $S
+        mkdir -p out && cp ~/rpmbuild/RPMS/x86_64/at-spi2-core-2.62.1-1.1.fc45.x86_64.rpm out/
+        cd out && rpm2cpio at-spi2-core-2.62.1-1.1.fc45.x86_64.rpm | cpio -idm --quiet './usr/lib64/libatspi.so.0.0.1'
+        sha256sum at-spi2-core-*.rpm usr/lib64/libatspi.so.0.0.1 | tee SHA256SUMS
+    - uses: actions/upload-artifact@v4
+      with:
+        name: at-spi2-core-claw-rpm
+        path: out/
