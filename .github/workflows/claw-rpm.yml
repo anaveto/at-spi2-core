@@ -23,8 +23,8 @@ jobs:
       run: |
         S=~/rpmbuild/SPECS/at-spi2-core.spec
         cp device-x11-finalize-without-display.patch ~/rpmbuild/SOURCES/
-        sed -i 's/^Release:\( *\)1%{?dist}/Release:\11.1%{?dist}/' $S
-        grep -q '^Release: *1.1%{?dist}' $S
+        sed -i 's/^Release:.*/Release:        1.1%{?dist}/' $S
+        grep -q '^Release: *1.1%{?dist}$' $S
         sed -i '0,/^Source0:.*/s//&\nPatch: device-x11-finalize-without-display.patch/' $S
         grep -n -E '^(Release|Source0|Patch)|%autosetup|%setup' $S
         grep -q -E '%autosetup' $S
